@@ -5,6 +5,7 @@
 
 #define INIT_PAINT_LOG		"Server current log"
 #define	INIT_STARTUP_BUTT	"Startup"
+#define NO_AVAILABLE_MEM	"ERR::Server init failed: no available mem to init"
 #define	INIT_STARTUP_SUCC	"Winsock2 startup succeeded"
 #define INIT_STARTUP_FAIL	"ERR::WSAStartup(): %d"
 #define INIT_QUERY_VERSION	"ERR::WSAStartup(): query version incorrect"
@@ -21,7 +22,7 @@
 #define USR_IOMODEL_FAIL	"ERR::sockData ioctlsocket(): %ld"
 #define SELECT_FAIL			"ERR::select(): %ld"
 #define	ACCEPT_FAIL			"ERR::accept(): %ld"
-#define ACCEPT_SUCC			"%s connection succeeded"
+#define ACCEPT_SUCC			"%s:%d connection succeeded"
 #define	MESS_RECV_FAIL		"ERR::recv(): %ld"
 #define	MESS_SEND_FAIL		"ERR::send(): %ld"
 

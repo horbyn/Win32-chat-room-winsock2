@@ -17,6 +17,7 @@
 #pragma comment(lib, "ws2_32.lib")
 
 #define DEFAULT_BUFLEN			512
+#define DEFAULT_SERVER_PORT		"8888"
 #define MAX_CLIENT				64
 #define MARGIN					20
 #define TIMEOUT					10000
@@ -47,6 +48,7 @@ SCTLTEXT	szSCtlBuf;					// 静态文本框缓冲区
 TCHAR		szDefHost[MAX_IP_LEN];		// 绑定地址
 WSADATA		wsaData;					// socket 信息结构体
 SOCKET		hListen;					// 服务器监听 socket
+BOOL		fListen;					// 已绑定并正在监听
 SOCKINFO	g_sock[MAX_CLIENT];			// 所有数据传输 socket
 int			g_sockNum;					// 已连接 socket 数量
 

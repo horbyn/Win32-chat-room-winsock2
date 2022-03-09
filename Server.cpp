@@ -1,6 +1,6 @@
 #include "Server.h"
 
-int WINAPI
+int WINAPI 
 WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     WNDCLASSEX wndClass = {
         sizeof(WNDCLASSEX),
@@ -34,7 +34,7 @@ WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR l
     return 0;
 }
 
-LRESULT CALLBACK
+LRESULT CALLBACK 
 WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     int         wmId, wmEvent;      // 捕获 WM_COMMAND 消息
     PAINTSTRUCT paintStruct;
@@ -50,7 +50,11 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         cyChar = tm.tmHeight + tm.tmExternalLeading;
 
         PaintInit(hWnd);
-        ServerInit(cxChar, cyChar);
+        if (!ServerInit(cxChar, cyChar)) {
+            SetWindowText(hSCtlLog, _T(NO_AVAILABLE_MEM));
+            EnableWindow(hSCtlEdit, FALSE);
+            EnableWindow(hSCtlStartButton, FALSE);
+        }
         ReleaseDC(hWnd, g_hdc);
         break;
     case WM_PAINT:
@@ -67,14 +71,20 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         wmEvent = HIWORD(wParam);
         switch (wmId) {
         case SERVER_STARTUP_BUTT:   // Start 按钮
+            EnableWindow(hSCtlEdit, FALSE);
             EnableWindow(hSCtlStartButton, FALSE);
-            if (!ServerConfig())    EnableWindow(hSCtlStartButton, TRUE);
+            if (!ServerConfig()) {
+                EnableWindow(hSCtlEdit, TRUE);
+                EnableWindow(hSCtlStartButton, TRUE);
+            }
             break;
         default: return DefWindowProc(hWnd, message, wParam, lParam);
         }
         ReleaseDC(hWnd, g_hdc);
         break;
     case WM_DESTROY:
+        free(szSCtlBuf.buf);
+        ServerFree();
         PostQuitMessage(0);
         break;
     default: return DefWindowProc(hWnd, message, wParam, lParam);
@@ -82,7 +92,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-void
+void 
 PaintInit(HWND hWnd) {
     // 创建文本框标题
     hSCtlCap = CreateWindow(
@@ -131,7 +141,7 @@ PaintInit(HWND hWnd) {
     );
 }
 
-BOOL
+BOOL 
 ServerInit(int cxChar, int cyChar) {
     // 初始化文本框相关信息
     RECT rec;
@@ -150,6 +160,7 @@ ServerInit(int cxChar, int cyChar) {
     // 初始化 socket 相关信息
     memset(&wsaData, 0, sizeof(WSADATA));
     hListen = INVALID_SOCKET;
+    fListen = FALSE;
 
     // 初始化用户 socket 数组
     memset(&g_sock, 0, sizeof(SOCKINFO) * MAX_CLIENT);
@@ -158,7 +169,7 @@ ServerInit(int cxChar, int cyChar) {
 }
 
 /* Purpose: 往静态文本框(Server log)写字符串，若超出窗口大小会删除第一行字符串 */
-BOOL
+BOOL 
 SCtlTextBufPush(LPCTSTR szSrc) {
     if (szSCtlBuf.cRow == szSCtlBuf.row) {
         // 如果文本框行数累计够了上限，就要删除开头一行
@@ -195,7 +206,7 @@ SCtlTextBufPush(LPCTSTR szSrc) {
     return TRUE;
 }
 
-BOOL
+BOOL 
 ServerConfig() {
     int err, iLen = szSCtlBuf.tot;
     struct addrinfoW servHint, * result = NULL;
@@ -228,13 +239,13 @@ ServerConfig() {
 
     /* S1: 创建 socket */
     memset(&servHint, 0, sizeof(struct addrinfoW));
-    servHint.ai_family   = AF_INET;
+    servHint.ai_family   = AF_UNSPEC;// 既可 IPV4 也可 IPV6
     servHint.ai_socktype = SOCK_STREAM;
     servHint.ai_protocol = IPPROTO_TCP;
     servHint.ai_flags    = AI_PASSIVE | AI_NUMERICHOST;
 
     // 第二个参数 NULL 表明端口不指定，第四个参数是取指针地址而不是结构体地址
-    err = GetAddrInfo(szDefHost, NULL, &servHint, &result);
+    err = GetAddrInfo(szDefHost, _T(DEFAULT_SERVER_PORT), &servHint, &result);
     if (err != 0) {
         StringCchPrintf(szErr, iLen, _T(RUN_TRANS_IP_FAIL), err);
         SCtlTextBufPush(szErr);
@@ -284,33 +295,153 @@ ServerConfig() {
 
     if (!SCtlTextBufPush(_T(SERVER_CONFIG_SUCC)))
         goto CLEAN_UP;
+    fListen = TRUE;
 
     return TRUE;
 
 CLEAN_UP:
+    fListen = FALSE;
     if (hListen != INVALID_SOCKET)    closesocket(hListen);
     WSACleanup();
     free(szErr);
     return FALSE;
 }
 
-void
+void 
 FreeSockInfo(int i) {
     g_sockNum--;
     closesocket(g_sock[i].sock);
+    free(g_sock[i].wsaBuf.buf);
 
     for (int j = i; j < g_sockNum; ++j)
         g_sock[j] = g_sock[j + 1];
 }
 
-void
+void 
 ServerRun() {
-    ;
+    if (fListen == FALSE)    return;// 如果监听端口还未绑定，退出
+
+    int err, iLen = szSCtlBuf.tot;
+    LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
+    if (!szErr)    return;
+    struct fd_set readfds;
+    unsigned long nonblocking = 1;
+
+    // 每次都清空待读集合
+    FD_ZERO(&readfds);
+    FD_SET(hListen, &readfds);
+
+    // 将整个数组的 socket 都加入集合
+    for (int i = 0; i < g_sockNum; ++i)
+        FD_SET(g_sock[i].sock, &readfds);
+
+    // 最后一个参数设 0 即可，这样 select() 就是非阻塞的，每次执行该函数都是看一眼就走
+    TIMEVAL tv = { 0, 0 };
+    int tot = select(0, &readfds, NULL, NULL, &tv);
+    if (tot == SOCKET_ERROR) {
+        StringCchPrintf(szErr, iLen, _T(SELECT_FAIL), WSAGetLastError());
+        SCtlTextBufPush(szErr);
+        goto CLEAN_UP;
+    }
+
+    // 先检查 hListen 是否有新连接请求
+    if (FD_ISSET(hListen, &readfds)) {
+        --tot;
+
+        // accept
+        struct sockaddr_in user;
+        user.sin_family = AF_INET;
+        int size = sizeof(struct sockaddr_in);
+        SOCKET sockData = accept(hListen, (struct sockaddr *)&user, &size);
+        if (sockData == INVALID_SOCKET && WSAGetLastError() != WSAEWOULDBLOCK) {
+            StringCchPrintf(szErr, iLen, _T(ACCEPT_FAIL), WSAGetLastError());
+            SCtlTextBufPush(szErr);
+            return;
+        }
+
+        // 将实际用于数据传输的用户 socket 设为非阻塞
+        err = ioctlsocket(sockData, FIONBIO, &nonblocking);
+        if (err == SOCKET_ERROR) {
+            StringCchPrintf(szErr, iLen, _T(USR_IOMODEL_FAIL), WSAGetLastError());
+            SCtlTextBufPush(szErr);
+            closesocket(sockData);
+            return;
+        }
+
+        // 打印用户信息（先将 ip 转为宽字符）
+        size_t convLen;
+        LPTSTR pWCBuf = (LPTSTR)malloc(MAX_IP_LEN * sizeof(TCHAR));
+        if (!pWCBuf)    goto CLEAN_UP;
+        if (mbstowcs_s(&convLen, pWCBuf, (size_t)MAX_IP_LEN, inet_ntoa(user.sin_addr), (size_t)MAX_IP_LEN - 1) != 0) {
+            free(pWCBuf);
+            goto CLEAN_UP;
+        }
+        if (StringCchPrintf(szErr, iLen, _T(ACCEPT_SUCC), pWCBuf, ntohs(user.sin_port)) != S_OK)
+            goto CLEAN_UP;
+        if (!SCtlTextBufPush(szErr))
+            goto CLEAN_UP;
+        free(pWCBuf);
+
+        // 添加用户 socket 至全局数组
+        g_sock[g_sockNum].sock = sockData;
+        g_sock[g_sockNum].wsaBuf.buf = (LPCH)malloc(DEFAULT_BUFLEN * sizeof(CHAR));
+        if (!g_sock[g_sockNum].wsaBuf.buf)    goto CLEAN_UP;
+        g_sock[g_sockNum].wsaBuf.len = 0;
+        memset(g_sock[g_sockNum].wsaBuf.buf, 0, DEFAULT_BUFLEN);
+        ++g_sockNum;
+    }
+
+    // 遍历整个全局数组检查每个 socket 是否产生 IO 事件
+    // (实际上第一次新加入的数据传输 socket 会在下一次循环才进来 for)
+    for (int i = 0; tot > 0 && i < g_sockNum; ++i) {
+        if (FD_ISSET(g_sock[i].sock, &readfds)) {
+            // 数据传输专用的 socket 产生可读事件
+            --tot;
+            int iRes = recv(g_sock[i].sock, g_sock[i].wsaBuf.buf, DEFAULT_BUFLEN, 0);
+            if (iRes == SOCKET_ERROR) {
+                if (WSAGetLastError() != WSAEWOULDBLOCK) {
+                    StringCchPrintf(szErr, iLen, _T(MESS_RECV_FAIL), WSAGetLastError());
+                    SCtlTextBufPush(szErr);
+                    FreeSockInfo(i);
+                    continue;
+                } else    continue;// 如果是 WSAEWOULDBLOCK 只是数据未到达所以继续遍历即可
+            } else if (iRes == 0) {
+                // 对端连接关闭
+                FreeSockInfo(i);
+                continue;
+            }
+
+            // Echo
+            g_sock[i].wsaBuf.len = iRes;
+            iRes = send(g_sock[i].sock, g_sock[i].wsaBuf.buf, g_sock[i].wsaBuf.len, 0);
+            if (iRes == SOCKET_ERROR) {
+                // 同样道理 WSAEWOULDBLOCK 对于发送只是缓冲区不够位置，不算出错
+                if (WSAGetLastError() == WSAEWOULDBLOCK)    continue;
+
+                StringCchPrintf(szErr, iLen, _T(MESS_SEND_FAIL), WSAGetLastError());
+                SCtlTextBufPush(szErr);
+                FreeSockInfo(i);
+            }
+        }
+    }
+
+CLEAN_UP:
+    free(szErr);
 }
 
-void
+void 
 ServerFree() {
     // 释放所有用户 socket 数组
+    for (int i = 0; i < g_sockNum; ++i) {
+        closesocket(g_sock[i].sock);
+        free(g_sock[i].wsaBuf.buf);
+    }
+    g_sockNum = 0;
+
     // 释放监听 socket
+    if (hListen != INVALID_SOCKET)    closesocket(hListen);
+    fListen = FALSE;
+
     // 释放 Winsock2 dll
+    WSACleanup();
 }
