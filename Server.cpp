@@ -27,7 +27,7 @@ WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR l
             // 有消息时处理消息
             TranslateMessage(&msg);
             DispatchMessage(&msg);
-        } else    ServerRun();// 无消息跑服务器
+        } else if (fListen)    ServerRun();// 无消息跑服务器
     }
 
     UnregisterClass(_T("CServer"), wndClass.hInstance);// 即使注册用 EX，也调用这个
@@ -123,7 +123,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL,
         MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 400, 40,
         hWnd,
-        (HMENU)SERVER_EDIT,
+        (HMENU)SERVER_ADDR,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -319,8 +319,6 @@ FreeSockInfo(int i) {
 
 void 
 ServerRun() {
-    if (fListen == FALSE)    return;// 如果监听端口还未绑定，退出
-
     int err, iLen = szSCtlBuf.tot;
     LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
     if (!szErr)    return;

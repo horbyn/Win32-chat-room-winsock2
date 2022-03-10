@@ -27,7 +27,7 @@
 #define	SERVER_TEXT_BODY		2
 #define SERVER_SCROLL			3
 #define	SERVER_STARTUP_BUTT		4
-#define	SERVER_EDIT				5
+#define	SERVER_ADDR				5
 
 typedef struct tagSCtlText {
 	int row, col, tot, cRow;
