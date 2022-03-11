@@ -22,12 +22,12 @@
 #define TIMEOUT					10000
 #define MAX_IP_LEN				16
 
-#define	SERVER_TEXT_CAPTION		1
-#define	SERVER_TEXT_BODY		2
-#define SERVER_SCROLL			3
-#define	SERVER_STARTUP_BUTT		4
-#define	SERVER_ADDR				5
-#define	SERVER_PORT				6
+#define	IDC_SERVER_TEXT_CAPTION	1
+#define	IDC_SERVER_TEXT_BODY	2
+#define IDC_SERVER_SCROLL		3
+#define	IDC_SERVER_STARTUP_BUTT	4
+#define	IDC_SERVER_ADDR			5
+#define	IDC_SERVER_PORT			6
 
 typedef struct tagSCtlText {
 	int row, col, tot, cRow;

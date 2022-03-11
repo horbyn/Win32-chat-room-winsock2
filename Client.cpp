@@ -43,7 +43,8 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     int         wmId, wmEvent;      // 捕获 WM_COMMAND 消息
     PAINTSTRUCT paintStruct;
     TEXTMETRIC  tm;                 // 字体尺寸结构体
-    static int  cxChar, cyChar;
+    //int ItemIndex;
+    //TCHAR  ListItem[256];
 
     switch (message) {
     case WM_CREATE:
@@ -60,6 +61,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             EnableWindow(hSCtlServAddr, FALSE);
             EnableWindow(hSCtlServPort, FALSE);
             EnableWindow(hSCtlServButton, FALSE);
+            EnableWindow(hSCtlCombo, FALSE);
             EnableWindow(hSCtlAddr, FALSE);
             EnableWindow(hSCtlButton, FALSE);
         }
@@ -70,6 +72,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(hSCtlServAddr, NULL, FALSE);
         InvalidateRect(hSCtlServPort, NULL, FALSE);
         InvalidateRect(hSCtlServButton, NULL, FALSE);
+        InvalidateRect(hSCtlCombo, NULL, FALSE);
         InvalidateRect(hSCtlText, NULL, FALSE);
         InvalidateRect(hSCtlAddr, NULL, FALSE);
         InvalidateRect(hSCtlButton, NULL, FALSE);
@@ -80,15 +83,30 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         wmId = LOWORD(wParam);
         wmEvent = HIWORD(wParam);
         switch (wmId) {
-        case SERVER_BUTTON:// 服务器连接按钮
+        case IDC_SERVER_BUTTON:// 服务器连接按钮
             ChangeState(&fButtState);
             break;
-        case CLIENT_BUTTON:// 消息发送按钮
+        case IDC_CLIENT_BUTTON:// 消息发送按钮
             GetWindowTextA(hSCtlAddr, szSend, DEFAULT_BUFLEN);// 获取控件输入
             SetWindowText(hSCtlAddr, _T(""));// 每次发完消息清空控件
             break;
+        case IDC_CLIENT_USER_COMBO:// 用户列表
+                switch (wmEvent) {
+                case CBN_SELCHANGE:
+                    if (HIWORD(wParam) == CBN_SELCHANGE)
+                    {
+                        //ItemIndex = SendMessage((HWND)lParam, (UINT)CB_GETCURSEL,
+                        //    (WPARAM)0, (LPARAM)0);
+                        //(TCHAR)SendMessage((HWND)lParam, (UINT)CB_GETLBTEXT,
+                        //    (WPARAM)ItemIndex, (LPARAM)ListItem);
+                    }
+                    break;
+                default: return DefWindowProc(hWnd, message, wParam, lParam);
+                }
+            break;
         default: return DefWindowProc(hWnd, message, wParam, lParam);
         }
+
         ReleaseDC(hWnd, g_hdc);
         break;
     case WM_KEYDOWN:
@@ -152,7 +170,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
         MARGIN, MARGIN, 110, 40,
         hWnd,
-        (HMENU)SERVER_ADDR,
+        (HMENU)IDC_SERVER_ADDR,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -163,7 +181,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
         MARGIN + 110 + MARGIN, MARGIN, 90, 40,
         hWnd,
-        (HMENU)SERVER_PORT,
+        (HMENU)IDC_SERVER_PORT,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -174,18 +192,30 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | BS_FLAT,
         MARGIN + 220 + MARGIN, MARGIN, 100, 40,
         hWnd,
-        (HMENU)SERVER_BUTTON,
+        (HMENU)IDC_SERVER_BUTTON,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
+    // 创建静态列表框
+    hSCtlCombo = CreateWindow(
+        _T("COMBOBOX"),
+        NULL,
+        WS_CHILD | WS_BORDER | WS_VISIBLE | LBS_STANDARD /* 滚动条 */ | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
+        MARGIN, MARGIN + 40 + MARGIN, 340, cyChar * 6,
+        hWnd,
+        (HMENU)IDC_CLIENT_USER_COMBO,
+        (HINSTANCE)GetWindowLong(hWnd, GWL_HINSTANCE),
+        NULL
+    );
+    EnableWindow(hSCtlCombo, FALSE);
     // 创建静态文本框
     hSCtlText = CreateWindow(
         _T("Static"),
         NULL,
         WS_CHILD | WS_BORDER | WS_VISIBLE,
-        MARGIN, MARGIN + 40 + MARGIN, 340, 300,
+        MARGIN, MARGIN + 40 + MARGIN + 20 + MARGIN, 340, 260,
         hWnd,
-        (HMENU)CLIENT_TEXT_BODY,
+        (HMENU)IDC_CLIENT_TEXT_BODY,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -196,7 +226,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
         MARGIN, MARGIN + 360 + MARGIN, 260, 40,
         hWnd,
-        (HMENU)CLIENT_EDIT,
+        (HMENU)IDC_CLIENT_EDIT,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -207,7 +237,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | BS_FLAT,
         MARGIN + 260 + MARGIN, MARGIN + 360 + MARGIN, 60, 40,
         hWnd,
-        (HMENU)CLIENT_BUTTON,
+        (HMENU)IDC_CLIENT_BUTTON,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -237,10 +267,12 @@ ClientInit(int cxChar, int cyChar) {
     memset(&szRecv, 0, DEFAULT_BUFLEN);
     fButtState = 0;
     hConn  = INVALID_SOCKET;
+    hPeer  = INVALID_SOCKET;
     fConf  = FALSE;
     fConn  = FALSE;
     fClose = FALSE;
     iCr    = 0;
+    fSel   = FALSE;
 
     /* 初始化 Winsock dll */
     const int iQueryVersion = 2;
@@ -270,11 +302,13 @@ ResetState() {
     SetWindowText(hSCtlServButton, _T(INIT_CONNECT_BUTT));
     EnableWindow(hSCtlServAddr, TRUE);
     EnableWindow(hSCtlServPort, TRUE);
+    EnableWindow(hSCtlCombo, FALSE);
     if (hConn != INVALID_SOCKET)    closesocket(hConn);
     fButtState = 0;
     fConf  = FALSE;
     fConn  = FALSE;
     fClose = FALSE;
+    fSel   = FALSE;
     iCr    = 0;
 }
 
@@ -285,6 +319,7 @@ ChangeState(int *state) {
         SetWindowText(hSCtlServButton, _T(CONNECT_TERMINATE));
         EnableWindow(hSCtlServAddr, FALSE);
         EnableWindow(hSCtlServPort, FALSE);
+        EnableWindow(hSCtlCombo, TRUE);
         if (!ClientConfig()) {
             SCtlTextBufPush(_T(CLIENT_CONFIG_FAIL));
             ResetState();
@@ -294,6 +329,7 @@ ChangeState(int *state) {
         SetWindowText(hSCtlServButton, _T(INIT_CONNECT_BUTT));
         EnableWindow(hSCtlServAddr, TRUE);
         EnableWindow(hSCtlServPort, TRUE);
+        EnableWindow(hSCtlCombo, FALSE);
         shutdown(hConn, SD_SEND);
     }
 
@@ -308,6 +344,7 @@ ClientConfig() {
     int port;
     unsigned long nonblocking = 1;
     const int PORT_BIT = 11;
+    sockaddr_in servAddr, peerAddr;
     TCHAR szDefServHost[MAX_IP_LEN], szDefServPort[PORT_BIT];//INT_MAX 最多 10 位
     LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
     LPSTR pMBBuf = (LPSTR)malloc(MAX_IP_LEN * sizeof(CHAR));
@@ -319,17 +356,33 @@ ClientConfig() {
     memset(szErr, 0, iLen);
     memset(pMBBuf, 0, MAX_IP_LEN);
     /* 创建 socket */
+    // TCP
     hConn = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (hConn == INVALID_SOCKET) {
-        StringCchPrintf(szErr, iLen, _T(CREATE_SOCKET_FAIL), WSAGetLastError());
+        StringCchPrintf(szErr, iLen, _T(CREATE_SOCKET_FAIL), _T("TCP"), WSAGetLastError());
+        SCtlTextBufPush(szErr);
+        goto CLEAN_UP;
+    }
+    // UDP
+    hPeer = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (hConn == INVALID_SOCKET) {
+        StringCchPrintf(szErr, iLen, _T(CREATE_SOCKET_FAIL), _T("UDP"), WSAGetLastError());
         SCtlTextBufPush(szErr);
         goto CLEAN_UP;
     }
 
     /* 设为非阻塞 */
+    // TCP
     err = ioctlsocket(hConn, FIONBIO, &nonblocking);
     if (err == SOCKET_ERROR) {
-        StringCchPrintf(szErr, iLen, _T(CONN_IOMODEL_FAIL), WSAGetLastError());
+        StringCchPrintf(szErr, iLen, _T(CONN_IOMODEL_FAIL), _T("TCP"), WSAGetLastError());
+        SCtlTextBufPush(szErr);
+        goto CLEAN_UP;
+    }
+    // UDP
+    err = ioctlsocket(hPeer, FIONBIO, &nonblocking);
+    if (err == SOCKET_ERROR) {
+        StringCchPrintf(szErr, iLen, _T(CONN_IOMODEL_FAIL), _T("UDP"), WSAGetLastError());
         SCtlTextBufPush(szErr);
         goto CLEAN_UP;
     }
@@ -350,12 +403,24 @@ ClientConfig() {
         goto CLEAN_UP;
     }
 
-    sockaddr_in servAddr;
+    // TCP
     servAddr.sin_family = AF_INET;
     servAddr.sin_port = htons(port);
     servAddr.sin_addr.S_un.S_addr = inet_addr(pMBBuf);
+    // UDP
+    peerAddr.sin_family = AF_INET;
+    peerAddr.sin_port = 0;// 随机端口
+    peerAddr.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");// UDP 绑定到本地
 
-    /* 连接服务器 */
+    /* UDP 绑定 */
+    err = bind(hPeer, (struct sockaddr*)&peerAddr, sizeof(peerAddr));
+    if (err == SOCKET_ERROR) {
+        StringCchPrintf(szErr, iLen, _T(LOCAL_BOUND_FAIL), WSAGetLastError());
+        SCtlTextBufPush(szErr);
+        goto CLEAN_UP;
+    }
+
+    /* TCP 连接服务器 */
     err = connect(hConn, (sockaddr*)&servAddr, sizeof(servAddr));
     if (err == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) {
         // WSAEWOULDBLOCK: 连接需要经过三次握手，但非阻塞 socket 会立即返回
@@ -419,23 +484,20 @@ CLEAN_UP:
 void 
 ClientRun() {
     int err;
-    errno_t et;
-    size_t convLen, sendLen;
     struct fd_set writefds, readfds;
     TIMEVAL tv = { 0, 0 };
     LPTSTR szErr = (LPTSTR)malloc(DEFAULT_BUFLEN * sizeof(TCHAR));
-    LPSTR szBuf = (LPSTR)malloc(DEFAULT_BUFLEN * sizeof(CHAR));
-    if (!szErr || !szBuf) {
+    if (!szErr) {
         SCtlTextBufPush(_T(NO_AVAILABLE_MEM));
         return;
     }
 
     memset(szErr, 0, DEFAULT_BUFLEN);
-    memset(szBuf, 0, DEFAULT_BUFLEN);
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
     FD_SET(hConn, &readfds);
-    FD_SET(hConn, &writefds);
+    FD_SET(hPeer, &readfds);
+    FD_SET(hPeer, &writefds);
 
     /* 检测 IO 事件 */
     err = select(0, &readfds, &writefds, NULL, &tv);
@@ -445,7 +507,7 @@ ClientRun() {
         goto CLEAN_UP;
     } else if (err == 0)    return;// 无事件到达
 
-    /* 可读事件 */
+    /* 检测服务器更新的用户列表 */
     if (FD_ISSET(hConn, &readfds)) {
         err = recv(hConn, szRecv, DEFAULT_BUFLEN, 0);
         if (err == SOCKET_ERROR) {
@@ -463,51 +525,21 @@ ClientRun() {
                 return;
             }
 
-            // 输出至窗口文本框（注意要宽字符转换）
-            StringCchCopyA(szBuf, DEFAULT_BUFLEN, SERVER_MSG_PREFIX);
-            StringCchCatA(szBuf, DEFAULT_BUFLEN, szRecv);
-            mbstowcs_s(&convLen, szErr, (size_t)DEFAULT_BUFLEN, szBuf, (size_t)DEFAULT_BUFLEN - 1);
-            SCtlTextBufPush(szErr);
+            ///////////////////// 接收用户列表（只要有一个用户就行，接收不完全也没关系）
+            ///////////////////// 更新到本地
+            if (!UpdateUser())    goto CLEAN_UP;
         }
     }
 
-    /* 可写事件 */
-    if (FD_ISSET(hConn, &writefds)) {
-        // 获取用户输入
-        if (StringCchLengthA(szSend, DEFAULT_BUFLEN, &sendLen) != S_OK)
-            goto CLEAN_UP;
-        if (sendLen == 0)    goto CLEAN_UP;// 如果用户没输入，就不发送
+    /////////////////// 用户选择了一个列表条目后才继续
+    /* P2P */
+    if (!fSel)    goto CLEAN_UP;// 用户没有选择聊天对象
+    if (FD_ISSET(hPeer, &readfds)) {
+        ;
+    }
 
-        // 加上 "Client: " 的前缀再显示到文本框
-        if (StringCchCopyA(szBuf, DEFAULT_BUFLEN, CLIENT_MSG_PREFIX) != S_OK)
-            goto CLEAN_UP;
-        if (StringCchCatA(szBuf, DEFAULT_BUFLEN, szSend) != S_OK)
-            goto CLEAN_UP;
-        et = mbstowcs_s(&convLen, szErr, (size_t)DEFAULT_BUFLEN, szBuf, (size_t)DEFAULT_BUFLEN - 1);
-        if (et != 0) {
-            StringCchPrintf(szErr, DEFAULT_BUFLEN, _T(FONT_FORMAT_ERROR), et);
-            SCtlTextBufPush(szErr);
-            goto CLEAN_UP;
-        }
-        if (!SCtlTextBufPush(szErr)) {
-            // 用户输入太多（此处将不发送）
-            // 但其实发送也可以，并且下一次进入本函数将会 recv() 到，但
-            // 在 SCtlTextBufPush() 内有长度限制的处理，即
-            // 过长而致不能一行显示全部的消息将不显示。所以实际上超过一行的消息也可以
-            // 正常收发，只是此处简单处理为不显示（因为显示要考虑分行的问题）
-            StringCchPrintf(szErr, DEFAULT_BUFLEN, _T(MESSAGE_TOO_LONG));
-            SCtlTextBufPush(szErr);
-            goto CLEAN_UP;
-        }
-
-        err = send(hConn, szSend, sendLen, 0);
-        if (err == SOCKET_ERROR) {
-            // WSAEWOULDBLOCK 对于发送只是缓冲区不够位置，不算出错
-            if (WSAGetLastError() == WSAEWOULDBLOCK)    return;
-
-            StringCchPrintf(szErr, DEFAULT_BUFLEN, _T(MESS_SEND_FAIL), WSAGetLastError());
-            SCtlTextBufPush(szErr);
-        }
+    if (FD_ISSET(hPeer, &writefds)) {
+        ;
     }
 
 CLEAN_UP:
@@ -515,5 +547,9 @@ CLEAN_UP:
     memset(szSend, 0, DEFAULT_BUFLEN);
     memset(szRecv, 0, DEFAULT_BUFLEN);
     free(szErr);
-    free(szBuf);
+}
+
+BOOL 
+UpdateUser() {
+    ;
 }

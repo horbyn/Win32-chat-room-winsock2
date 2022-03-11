@@ -71,7 +71,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         wmId = LOWORD(wParam);
         wmEvent = HIWORD(wParam);
         switch (wmId) {
-        case SERVER_STARTUP_BUTT:   // Start °´Å¥
+        case IDC_SERVER_STARTUP_BUTT:   // Start °´Å¥
             EnableWindow(hSCtlAddr, FALSE);
             EnableWindow(hSCtlPort, FALSE);
             EnableWindow(hSCtlStartButton, FALSE);
@@ -104,7 +104,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
         MARGIN, MARGIN, 580, 40,
         hWnd,
-        (HMENU)SERVER_TEXT_CAPTION,
+        (HMENU)IDC_SERVER_TEXT_CAPTION,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -115,7 +115,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | SS_LEFT,
         MARGIN, MARGIN + 40 + MARGIN, 580, 250,
         hWnd,
-        (HMENU)SERVER_TEXT_BODY,
+        (HMENU)IDC_SERVER_TEXT_BODY,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -126,7 +126,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL,
         MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 220, 40,
         hWnd,
-        (HMENU)SERVER_ADDR,
+        (HMENU)IDC_SERVER_ADDR,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -137,7 +137,7 @@ PaintInit(HWND hWnd) {
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL,
         MARGIN + 220 + MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 160, 40,
         hWnd,
-        (HMENU)SERVER_PORT,
+        (HMENU)IDC_SERVER_PORT,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -149,7 +149,7 @@ PaintInit(HWND hWnd) {
         MARGIN + 400 + MARGIN,
         MARGIN + 40 + MARGIN + 250 + MARGIN, 160, 40,
         hWnd,
-        (HMENU)SERVER_STARTUP_BUTT,
+        (HMENU)IDC_SERVER_STARTUP_BUTT,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
