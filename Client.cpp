@@ -60,7 +60,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             EnableWindow(hSCtlServAddr, FALSE);
             EnableWindow(hSCtlServPort, FALSE);
             EnableWindow(hSCtlServButton, FALSE);
-            EnableWindow(hSCtlEdit, FALSE);
+            EnableWindow(hSCtlAddr, FALSE);
             EnableWindow(hSCtlButton, FALSE);
         }
         ReleaseDC(hWnd, g_hdc);
@@ -71,7 +71,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(hSCtlServPort, NULL, FALSE);
         InvalidateRect(hSCtlServButton, NULL, FALSE);
         InvalidateRect(hSCtlText, NULL, FALSE);
-        InvalidateRect(hSCtlEdit, NULL, FALSE);
+        InvalidateRect(hSCtlAddr, NULL, FALSE);
         InvalidateRect(hSCtlButton, NULL, FALSE);
         EndPaint(hWnd, &paintStruct);
         break;
@@ -84,8 +84,8 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             ChangeState(&fButtState);
             break;
         case CLIENT_BUTTON:// 消息发送按钮
-            GetWindowTextA(hSCtlEdit, szSend, DEFAULT_BUFLEN);// 获取控件输入
-            SetWindowText(hSCtlEdit, _T(""));// 每次发完消息清空控件
+            GetWindowTextA(hSCtlAddr, szSend, DEFAULT_BUFLEN);// 获取控件输入
+            SetWindowText(hSCtlAddr, _T(""));// 每次发完消息清空控件
             break;
         default: return DefWindowProc(hWnd, message, wParam, lParam);
         }
@@ -190,7 +190,7 @@ PaintInit(HWND hWnd) {
         NULL
     );
     // 创建静态编辑框
-    hSCtlEdit = CreateWindow(
+    hSCtlAddr = CreateWindow(
         _T("Edit"),
         _T(""),
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,

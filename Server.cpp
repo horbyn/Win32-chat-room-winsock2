@@ -52,7 +52,7 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         PaintInit(hWnd);
         if (!ServerInit(cxChar, cyChar)) {
             SetWindowText(hSCtlLog, _T(NO_AVAILABLE_MEM));
-            EnableWindow(hSCtlEdit, FALSE);
+            EnableWindow(hSCtlAddr, FALSE);
             EnableWindow(hSCtlStartButton, FALSE);
         }
         ReleaseDC(hWnd, g_hdc);
@@ -61,7 +61,8 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         g_hdc = BeginPaint(hWnd, &paintStruct);
         InvalidateRect(hSCtlCap, NULL, FALSE);
         InvalidateRect(hSCtlLog, NULL, FALSE);
-        InvalidateRect(hSCtlEdit, NULL, FALSE);
+        InvalidateRect(hSCtlAddr, NULL, FALSE);
+        InvalidateRect(hSCtlPort, NULL, FALSE);
         InvalidateRect(hSCtlStartButton, NULL, FALSE);
         EndPaint(hWnd, &paintStruct);
         break;
@@ -71,10 +72,12 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         wmEvent = HIWORD(wParam);
         switch (wmId) {
         case SERVER_STARTUP_BUTT:   // Start 按钮
-            EnableWindow(hSCtlEdit, FALSE);
+            EnableWindow(hSCtlAddr, FALSE);
+            EnableWindow(hSCtlPort, FALSE);
             EnableWindow(hSCtlStartButton, FALSE);
             if (!ServerConfig()) {
-                EnableWindow(hSCtlEdit, TRUE);
+                EnableWindow(hSCtlAddr, TRUE);
+                EnableWindow(hSCtlPort, FALSE);
                 EnableWindow(hSCtlStartButton, TRUE);
             }
             break;
@@ -117,13 +120,24 @@ PaintInit(HWND hWnd) {
         NULL
     );
     // 创建编辑框
-    hSCtlEdit = CreateWindow(
+    hSCtlAddr = CreateWindow(
         _T("Edit"),
         _T("127.0.0.1"),
         WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL,
-        MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 400, 40,
+        MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 220, 40,
         hWnd,
         (HMENU)SERVER_ADDR,
+        (HINSTANCE)GetModuleHandle(NULL),
+        NULL
+    );
+    // 创建编辑框
+    hSCtlPort = CreateWindow(
+        _T("Edit"),
+        _T("8888"),
+        WS_CHILD | WS_BORDER | WS_VISIBLE | ES_AUTOHSCROLL,
+        MARGIN + 220 + MARGIN, MARGIN + 40 + MARGIN + 250 + MARGIN, 160, 40,
+        hWnd,
+        (HMENU)SERVER_PORT,
         (HINSTANCE)GetModuleHandle(NULL),
         NULL
     );
@@ -208,13 +222,23 @@ SCtlTextBufPush(LPCTSTR szSrc) {
 
 BOOL 
 ServerConfig() {
-    int err, iLen = szSCtlBuf.tot;
+    int err, iLen = szSCtlBuf.tot, port;
+    const int PORT_BIT = 11;
+    TCHAR szDefServPort[PORT_BIT];//INT_MAX 最多 10 位
     struct addrinfoW servHint, * result = NULL;
     unsigned long nonblocking = 1;
     int iTime = TIMEOUT;
     LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
     if (!szErr)    return FALSE;
-    GetWindowText(hSCtlEdit, szDefHost, MAX_IP_LEN);
+    GetWindowText(hSCtlAddr, szDefHost, MAX_IP_LEN);
+    // 就算用户输入 111..111 也最多接收 9 个 1，INT_MAX 10 位也可能爆，只允许 9 个
+    GetWindowText(hSCtlPort, szDefServPort, PORT_BIT);
+    port = _wtoi(szDefServPort);
+    if (port < 0 || port > 65535) {
+        // 用 int 来接收 short 的端口，才能知道有没有超出 short 的范围
+        SCtlTextBufPush(_T(PORT_INP_INCORRECT));
+        return FALSE;
+    }
 
     /* S0: 初始化 Winsock dll */
     const int iQueryVersion = 2;
@@ -244,8 +268,8 @@ ServerConfig() {
     servHint.ai_protocol = IPPROTO_TCP;
     servHint.ai_flags    = AI_PASSIVE | AI_NUMERICHOST;
 
-    // 第二个参数 NULL 表明端口不指定，第四个参数是取指针地址而不是结构体地址
-    err = GetAddrInfo(szDefHost, _T(DEFAULT_SERVER_PORT), &servHint, &result);
+    // 第四个参数是取指针地址而不是结构体地址
+    err = GetAddrInfo(szDefHost, szDefServPort, &servHint, &result);
     if (err != 0) {
         StringCchPrintf(szErr, iLen, _T(RUN_TRANS_IP_FAIL), err);
         SCtlTextBufPush(szErr);
@@ -381,6 +405,7 @@ ServerRun() {
         free(pWCBuf);
 
         // 添加用户 socket 至全局数组
+        g_sock[g_sockNum].uInfo = user;
         g_sock[g_sockNum].sock = sockData;
         g_sock[g_sockNum].wsaBuf.buf = (LPCH)malloc(DEFAULT_BUFLEN * sizeof(CHAR));
         if (!g_sock[g_sockNum].wsaBuf.buf)    goto CLEAN_UP;
@@ -405,6 +430,18 @@ ServerRun() {
                 } else    continue;// 如果是 WSAEWOULDBLOCK 只是数据未到达所以继续遍历即可
             } else if (iRes == 0) {
                 // 对端连接关闭
+                size_t convLen;
+                LPTSTR pWCBuf = (LPTSTR)malloc(MAX_IP_LEN * sizeof(TCHAR));
+                if (!pWCBuf)    goto CLEAN_UP;
+                if (mbstowcs_s(&convLen, pWCBuf, (size_t)MAX_IP_LEN, inet_ntoa(g_sock[i].uInfo.sin_addr), (size_t)MAX_IP_LEN - 1) != 0) {
+                    free(pWCBuf);
+                    goto CLEAN_UP;
+                }
+                if (StringCchPrintf(szErr, iLen, _T(TERMINATION_CONN), pWCBuf, ntohs(g_sock[i].uInfo.sin_port)) != S_OK)
+                    goto CLEAN_UP;
+                if (!SCtlTextBufPush(szErr))
+                    goto CLEAN_UP;
+                free(pWCBuf);
                 FreeSockInfo(i);
                 continue;
             }

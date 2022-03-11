@@ -8,6 +8,7 @@
 #define NO_AVAILABLE_MEM	"ERR::Server init failed: no available mem to init"
 #define	INIT_STARTUP_SUCC	"Winsock2 startup succeeded"
 #define INIT_STARTUP_FAIL	"ERR::WSAStartup(): %d"
+#define PORT_INP_INCORRECT	"ERR::_wtoi(): Port may be incorrect"
 #define INIT_QUERY_VERSION	"ERR::WSAStartup(): query version incorrect"
 #define RUN_TRANS_IP_FAIL	"ERR::GetAddrInfo(): %d"
 #define RUN_TRANS_IP_SUCC	"Trans ip to NBO succeeded"
@@ -23,6 +24,7 @@
 #define SELECT_FAIL			"ERR::select(): %ld"
 #define	ACCEPT_FAIL			"ERR::accept(): %ld"
 #define ACCEPT_SUCC			"%s:%d connection succeeded"
+#define TERMINATION_CONN	"%s:%d connection terminated"
 #define	MESS_RECV_FAIL		"ERR::recv(): %ld"
 #define	MESS_SEND_FAIL		"ERR::send(): %ld"
 

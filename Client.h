@@ -64,7 +64,7 @@ HWND		hSCtlServPort;				// 服务器端口输入框
 HWND		hSCtlServButton;			// 服务器地址输入确认按钮
 int			fButtState;					// 按钮状态: 连接/终止
 HWND		hSCtlText;					// 静态文本框
-HWND		hSCtlEdit;					// 静态输入框
+HWND		hSCtlAddr;					// 静态输入框
 HWND		hSCtlButton;				// 发送按钮句柄
 SCTLTEXT	szSCtlBuf;					// 静态文本框缓冲区
 SOCKET		hConn;						// 全局 socket
