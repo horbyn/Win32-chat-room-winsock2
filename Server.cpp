@@ -173,11 +173,13 @@ ServerInit(int cxChar, int cyChar) {
 
     // 初始化 socket 相关信息
     memset(&wsaData, 0, sizeof(WSADATA));
-    hListen = INVALID_SOCKET;
-    fListen = FALSE;
+    mp.clear();
+    hListen  = INVALID_SOCKET;
+    fListen  = FALSE;
 
     // 初始化用户 socket 数组
-    memset(&g_sock, 0, sizeof(SOCKINFO) * MAX_CLIENT);
+    memset(g_sock, 0, sizeof(SOCKINFO) * MAX_CLIENT);
+    memset(usrList, 0, MAX_CLIENT * 16);
 
     return TRUE;
 }
@@ -263,7 +265,7 @@ ServerConfig() {
 
     /* S1: 创建 socket */
     memset(&servHint, 0, sizeof(struct addrinfoW));
-    servHint.ai_family   = AF_UNSPEC;// 既可 IPV4 也可 IPV6
+    servHint.ai_family   = AF_INET;
     servHint.ai_socktype = SOCK_STREAM;
     servHint.ai_protocol = IPPROTO_TCP;
     servHint.ai_flags    = AI_PASSIVE | AI_NUMERICHOST;
@@ -335,7 +337,7 @@ void
 FreeSockInfo(int i) {
     g_sockNum--;
     closesocket(g_sock[i].sock);
-    free(g_sock[i].wsaBuf.buf);
+    free(g_sock[i].buf);
 
     for (int j = i; j < g_sockNum; ++j)
         g_sock[j] = g_sock[j + 1];
@@ -343,12 +345,19 @@ FreeSockInfo(int i) {
 
 void 
 ServerRun() {
-    int err, iLen = szSCtlBuf.tot;
-    LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
-    if (!szErr)    return;
-    struct fd_set readfds;
+    int err, iLen = szSCtlBuf.tot, i, iRes;
+    const int intev = sizeof(struct sockaddr);
+    uint64_t elem;
+    errno_t et;
     unsigned long nonblocking = 1;
+    struct sockaddr_in *p;
+    struct fd_set readfds;
+    LPTSTR szErr = (LPTSTR)malloc(iLen * sizeof(TCHAR));
+    LPSTR  szBuf = (LPSTR)malloc(intev * sizeof(CHAR));
+    if (!szErr || !szBuf)    return;
 
+    memset(szErr, 0, iLen);
+    memset(szBuf, 0, intev);
     // 每次都清空待读集合
     FD_ZERO(&readfds);
     FD_SET(hListen, &readfds);
@@ -407,20 +416,37 @@ ServerRun() {
         // 添加用户 socket 至全局数组
         g_sock[g_sockNum].uInfo = user;
         g_sock[g_sockNum].sock = sockData;
-        g_sock[g_sockNum].wsaBuf.buf = (LPCH)malloc(DEFAULT_BUFLEN * sizeof(CHAR));
-        if (!g_sock[g_sockNum].wsaBuf.buf)    goto CLEAN_UP;
-        g_sock[g_sockNum].wsaBuf.len = 0;
-        memset(g_sock[g_sockNum].wsaBuf.buf, 0, DEFAULT_BUFLEN);
+        g_sock[g_sockNum].buf = (LPSTR)malloc(DEFAULT_BUFLEN * sizeof(CHAR));
+        if (!g_sock[g_sockNum].buf)    goto CLEAN_UP;
+        memset(g_sock[g_sockNum].buf, 0, DEFAULT_BUFLEN);
+
+        // 更新用户列表（总是覆盖已经离开的用户对应的内存）
+        p = &user;// sockaddr_in 结构体转换二进制形式
+        for (i = 0; i < intev; ++i)    szBuf[i] = *((char*)p + i);
+        et = memcpy_s(usrList + g_sockNum * intev, intev, szBuf, intev);
+        if (et != 0)    goto CLEAN_UP;
+
+        // 加入哈希表
+        et = memcpy_s(&elem, sizeof(uint64_t), &user, sizeof(uint64_t));
+        if (et != 0)    goto CLEAN_UP;
+        mp[elem] = sockData;
+
         ++g_sockNum;
+
+        // 有用户上线，广播用户列表
+        if (!SendUserList()) {
+            StringCchPrintf(szErr, iLen, _T(USER_LIST_FAIL));
+            SCtlTextBufPush(szErr);
+            goto CLEAN_UP;
+        }
     }
 
     // 遍历整个全局数组检查每个 socket 是否产生 IO 事件
-    // (实际上第一次新加入的数据传输 socket 会在下一次循环才进来 for)
-    for (int i = 0; tot > 0 && i < g_sockNum; ++i) {
+    // 实际上第一次新加入的数据传输 socket 此处不满足，会在下一次循环才进来 for()
+    for (i = 0; tot > 0 && i < g_sockNum; ++i) {
         if (FD_ISSET(g_sock[i].sock, &readfds)) {
-            // 数据传输专用的 socket 产生可读事件
             --tot;
-            int iRes = recv(g_sock[i].sock, g_sock[i].wsaBuf.buf, DEFAULT_BUFLEN, 0);
+            iRes = recv(g_sock[i].sock, g_sock[i].buf, DEFAULT_BUFLEN, 0);
             if (iRes == SOCKET_ERROR) {
                 if (WSAGetLastError() != WSAEWOULDBLOCK) {
                     StringCchPrintf(szErr, iLen, _T(MESS_RECV_FAIL), WSAGetLastError());
@@ -442,26 +468,28 @@ ServerRun() {
                 if (!SCtlTextBufPush(szErr))
                     goto CLEAN_UP;
                 free(pWCBuf);
-                FreeSockInfo(i);
-                continue;
-            }
+                
+                // 删除哈希
+                et = memcpy_s(&elem, sizeof(uint64_t), &g_sock[i].uInfo, sizeof(uint64_t));
+                if (et != 0)    goto CLEAN_UP;
+                mp.erase(elem);
 
-            // Echo
-            g_sock[i].wsaBuf.len = iRes;
-            iRes = send(g_sock[i].sock, g_sock[i].wsaBuf.buf, g_sock[i].wsaBuf.len, 0);
-            if (iRes == SOCKET_ERROR) {
-                // 同样道理 WSAEWOULDBLOCK 对于发送只是缓冲区不够位置，不算出错
-                if (WSAGetLastError() == WSAEWOULDBLOCK)    continue;
-
-                StringCchPrintf(szErr, iLen, _T(MESS_SEND_FAIL), WSAGetLastError());
-                SCtlTextBufPush(szErr);
+                // 释放 sockinfo
                 FreeSockInfo(i);
-            }
+
+                // 有用户下线，广播列表
+                if (!SendUserList()) {
+                    StringCchPrintf(szErr, iLen, _T(USER_LIST_FAIL));
+                    SCtlTextBufPush(szErr);
+                    goto CLEAN_UP;
+                }
+            } else    TransferMess(i);// 转发聊天消息
         }
     }
 
 CLEAN_UP:
     free(szErr);
+    free(szBuf);
 }
 
 void 
@@ -469,7 +497,7 @@ ServerFree() {
     // 释放所有用户 socket 数组
     for (int i = 0; i < g_sockNum; ++i) {
         closesocket(g_sock[i].sock);
-        free(g_sock[i].wsaBuf.buf);
+        free(g_sock[i].buf);
     }
     g_sockNum = 0;
 
@@ -479,4 +507,94 @@ ServerFree() {
 
     // 释放 Winsock2 dll
     WSACleanup();
+}
+
+void 
+TransferMess(int idx) {
+    // 转发时大部分数据是原封不动的，只需要改变对应的 sockaddr 部分字段
+    errno_t et;
+    uint64_t elem;
+    const int inte = sizeof(struct sockaddr_in);
+    sockaddr_in peer;
+    LPTSTR szErr = (LPTSTR)malloc(DEFAULT_BUFLEN * sizeof(TCHAR));
+    if (!szErr)    return;
+    memset(szErr, 0, MSG_SIZE);
+
+    /* 解包 */
+    // 解包获取对端信息
+    int posPeer = 1 + 2;
+    et = memcpy_s(&peer, inte, g_sock[idx].buf + posPeer, inte);
+    if (et != 0) {
+        free(szErr);
+        return;
+    }
+
+    /* 封装 */
+    // 封装本地信息
+    et = memcpy_s(g_sock[idx].buf + posPeer, inte, &g_sock[idx].uInfo, inte);
+    if (et != 0) {
+        free(szErr);
+        return;
+    }
+
+    /* 转发 */
+    et = memcpy_s(&elem, sizeof(uint64_t), &peer, sizeof(uint64_t));
+    if (et != 0) {
+        free(szErr);
+        return;
+    }
+    int sendLen = send(mp[elem], g_sock[idx].buf, MSG_SIZE, 0);
+    if (sendLen == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) {
+        StringCchPrintf(szErr, DEFAULT_BUFLEN, _T(MESS_SEND_FAIL), WSAGetLastError());
+        SCtlTextBufPush(szErr);
+        free(szErr);
+        return;
+    }
+
+    free(szErr);
+}
+
+BOOL 
+SendUserList() {
+    const int inte = sizeof(struct sockaddr_in);
+    int ptr = 0, err;
+    u_short size;
+    errno_t et;
+    LPTSTR szErr = (LPTSTR)malloc(DEFAULT_BUFLEN * sizeof(TCHAR));
+    LPSTR buf = (LPSTR)malloc(MSG_SIZE * sizeof(CHAR));
+    if (!buf || !szErr)    return NULL;
+    memset(buf, 0, MSG_SIZE);
+    memset(szErr, 0, DEFAULT_BUFLEN);
+
+    // 封装包头
+    buf[ptr] = 0x7f;
+    ptr++;
+
+    // 封装长度
+    size = g_sockNum * inte;
+    et = memcpy_s(buf + ptr, sizeof(u_short), &size, sizeof(u_short));
+    if (et != 0)    return FALSE;
+    ptr += 2;
+
+    // 封装用户列表
+    for (int i = 0; i < g_sockNum; ++i, ptr += inte) {
+        et = memcpy_s(buf + ptr, inte, &g_sock[i].uInfo, inte);
+        if (et != 0) {
+            StringCchPrintf(szErr, DEFAULT_BUFLEN, _T(USER_LIST_UNPACK));
+            SCtlTextBufPush(szErr);
+            free(szErr);
+            free(buf);
+            return NULL;
+        }
+    }
+
+    // 广播
+    for (int i = 0; i < g_sockNum; ++i) {
+        err = send(g_sock[i].sock, buf, MSG_SIZE, 0);
+        if (err == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
+            return FALSE;
+    }
+
+    free(szErr);
+    return TRUE;
 }
